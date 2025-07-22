@@ -1,7 +1,6 @@
-<script type="text/x-red" data-help-name="postgresql">
+<script type="text/x-red" data-help-name="tables-query">
 	<p>
-		<a href="https://github.com/alexandrainst/node-red-contrib-postgresql">node-red-contrib-postgresql</a>
-		is a Node-RED node to query a <a href="https://www.postgresql.org/">PostgreSQL</a> 🐘 database.
+		This node allows you to write and run queries against database tables that are managed by FlowFuse Tables.
 	</p>
 
 	<h3>Outputs</h3>
@@ -61,34 +60,6 @@ SELECT * FROM table WHERE id = $id;
 	<em>Note</em>: named parameters are not natively supported by PostgreSQL, and this library just emulates them,
 	so this is less robust than numeric parameters.
 </p>
-
-	<h4>Dynamic PostgreSQL connection parameters</h4>
-	<p>
-		If the information about which database server to connect and how needs to be dynamic,
-		it is possible to pass a <a href="https://node-postgres.com/apis/client">custom client configuration</a> in the message:
-	</p>
-
-<pre>
-msg.pgConfig = {
-  user?: string, // default process.env.PGUSER || process.env.USER
-  password?: string, //or function, default process.env.PGPASSWORD
-  host?: string, // default process.env.PGHOST
-  database?: string, // default process.env.PGDATABASE || process.env.USER
-  port?: number, // default process.env.PGPORT
-  connectionString?: string, // e.g. postgres://user:password@host:5432/database
-  ssl?: any, // passed directly to node.TLSSocket, supports all tls.connect options
-  types?: any, // custom type parsers
-  statement_timeout?: number, // number of milliseconds before a statement in query will time out, default is no timeout
-  query_timeout?: number, // number of milliseconds before a query call will timeout, default is no timeout
-  application_name?: string, // The name of the application that created this Client instance
-  connectionTimeoutMillis?: number, // number of milliseconds to wait for connection, default is no timeout
-  idle_in_transaction_session_timeout?: number, // number of milliseconds before terminating any session with an open idle transaction, default is no timeout
-};
-</pre>
-	<p>
-		However, this does not use a <a href="https://node-postgres.com/features/pooling">connection pool</a>, and is therefore less efficient.
-		It is therefore recommended in most cases not to use <code>msg.pgConfig</code> at all and instead stick to the built-in configuration node.
-	</p>
 
 	<h3>Backpressure</h3>
 	<p>
