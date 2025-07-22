@@ -1,11 +1,12 @@
-# node-red-contrib-postgresql
+# FlowFuse Tables: Node-RED Nodes
 
-[node-red-contrib-postgresql](https://github.com/alexandrainst/node-red-contrib-postgresql)
-is a [**Node-RED**](https://nodered.org/) node to query a [**PostgreSQL**](https://www.postgresql.org/) 🐘 database.
+This repository contains a set of Node-RED nodes for use with the FlowFuse Tables offering, allowing developers to write and run queries against database tables inside FlowFuse Tables.
 
-It supports *splitting* the resultset and *backpressure* (flow control), to allow working with large datasets.
+## Nodes
 
-It supports *parameterized queries* and *multiple queries*.
+### Query
+
+This node allows you to write and run queries against database tables that are managed by FlowFuse Tables.
 
 ## Outputs
 
@@ -44,82 +45,45 @@ Parameters for parameterized queries can be passed as a parameter array `msg.par
 ```js
 // In a function, provide parameters for the parameterized query
 msg.params = [ msg.id ];
+return msg;
 ```
 
 ```sql
--- In this node, use a parameterized query
+-- In this node, use a parameterized query, in this example reading the 1st parameter
 SELECT * FROM table WHERE id = $1;
 ```
 
 ### Named parameterized query
 
-As an alternative to numeric parameters,
-named parameters for parameterized queries can be passed as a parameter object `msg.queryParameters`:
+As an alternative to numeric parameters, named parameters for parameterized queries can be passed as a parameter object in `msg.queryParameters`:
 
 ```js
 // In a function, provide parameters for the named parameterized query
 msg.queryParameters.id = msg.id;
+return msg;
 ```
 
 ```sql
--- In this node, use a named parameterized query
+-- In this node, use a named parameterized query, in this example reading the "id" parameter
 SELECT * FROM table WHERE id = $id;
 ```
 
 *Note*: named parameters are not natively supported by PostgreSQL, and this library just emulates them,
 so this is less robust than numeric parameters.
 
-### Dynamic PostgreSQL connection parameters
-
-If the information about which database server to connect and how needs to be dynamic,
-it is possible to pass a [custom client configuration](https://node-postgres.com/apis/client) in the message:
-
-```js
-msg.pgConfig = {
-  user?: string, // default process.env.PGUSER || process.env.USER
-  password?: string, //or function, default process.env.PGPASSWORD
-  host?: string, // default process.env.PGHOST
-  database?: string, // default process.env.PGDATABASE || process.env.USER
-  port?: number, // default process.env.PGPORT
-  connectionString?: string, // e.g. postgres://user:password@host:5432/database
-  ssl?: any, // passed directly to node.TLSSocket, supports all tls.connect options
-  types?: any, // custom type parsers
-  statement_timeout?: number, // number of milliseconds before a statement in query will time out, default is no timeout
-  query_timeout?: number, // number of milliseconds before a query call will timeout, default is no timeout
-  application_name?: string, // The name of the application that created this Client instance
-  connectionTimeoutMillis?: number, // number of milliseconds to wait for connection, default is no timeout
-  idle_in_transaction_session_timeout?: number, // number of milliseconds before terminating any session with an open idle transaction, default is no timeout
-};
-```
-
-However, this does not use a [connection pool](https://node-postgres.com/features/pooling), and is therefore less efficient.
-It is therefore recommended in most cases not to use `msg.pgConfig` at all and instead stick to the built-in configuration node.
 
 ## Installation
 
-### Using the Node-RED Editor
+### Running on FlowFuse
 
-You can install [**node-red-contrib-postgresql**](https://flows.nodered.org/node/node-red-contrib-postgresql) directly using the editor:
-Select *Manage Palette* from the menu (top right), and then select the *Install* tab in the palette.
+In order to run these nodes, you will need to have a Team, with the Tables feature enabled, running on FlowFuse.
 
-### Using npm
+This can be FlowFuse Cloud, Self-Hosted or Dedicated, but FlowFuse itself will require a paid-for license in order to use the Tables feature.
 
-You can alternatively install the [npm-packaged node](https://www.npmjs.com/package/node-red-contrib-postgresql):
+#### FlowFuse Cloud
 
-* Locally within your user data directory (by default, `$HOME/.node-red`):
+All Hosted Instances on FlowFuse Cloud will have the "query" node pre-installed. If, for any reason, it is not, you can go to the "Manage Palette" menu, and select the "Install" tab in the palette, searching for `@flowfuse/nr-tables-nodes`.
 
-```sh
-cd $HOME/.node-red
-npm i node-red-contrib-postgresql
-```
-
-* or globally alongside Node-RED:
-
-```sh
-npm i -g node-red-contrib-postgresql
-```
-
-You will then need to restart Node-RED.
 
 ## Backpressure
 
@@ -135,16 +99,6 @@ To make this behaviour potentially automatic (avoiding manual wires), this node 
 for downstream nodes to detect this feature, and a truthy `node.tickProvider` for upstream nodes.
 Likewise, this node detects upstream nodes using the same back-pressure convention, and automatically sends ticks.
 
-### Example of flow
-
-Example adding a new column in a table, then streaming (split) many lines from that table, batch-updating several lines at a time,
-then getting a sample consisting of a few lines:
-
-Example: [flow.json](examples/flow.json)
-
-![Node-RED flow](examples/flow.png)
-
-The *debug* nodes illustrate some relevant information to look at.
 
 ## Sequences for split results
 
@@ -166,14 +120,4 @@ conventions for [*messages sequences*](https://nodered.org/docs/user-guide/messa
 
 ## Credits
 
-Major rewrite in July 2021 by [Alexandre Alapetite](https://alexandra.dk/alexandre.alapetite) ([Alexandra Institute](https://alexandra.dk)),
-of parents forks:
-[andreabat](https://github.com/andreabat/node-red-contrib-postgrestor) /
-[ymedlop](https://github.com/doing-things-with-node-red/node-red-contrib-postgrestor) /
-[HySoaKa](https://github.com/HySoaKa/node-red-contrib-postgrestor),
-with inspiration from [node-red-contrib-re-postgres](https://flows.nodered.org/node/node-red-contrib-re-postgres)
-([code](https://github.com/elmagopy/node-red-contrib-re2-postgres)).
-
-This node builds uppon the [node-postgres](https://github.com/brianc/node-postgres) (`pg`) library.
-
-Contributions and collaboration welcome.
+This set of nodes originally started as a fork of [node-red-contrib-postgresql](https://github.com/alexandrainst/node-red-contrib-postgresql).

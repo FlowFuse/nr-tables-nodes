@@ -1,0 +1,11 @@
+{
+	"tables-query": {
+		"label": {
+			"name": "Name",
+			"server": "Server",
+			"query": "Query",
+			"split": "Split results in multiple messages",
+			"rowsPerMsg": "Rows per message"
+		}
+	}
+}
