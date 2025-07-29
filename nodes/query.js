@@ -30,7 +30,14 @@ function findInputNodeId(toNode, filter = null) {
 module.exports = function (RED) {
 	const Mustache = require('mustache');
 	const Cursor = require('pg-cursor');
+	const { Pool } = require('pg');
 	const named = require('../node-postgres-named.js');
+	const ffAPI = require('./utils/ff-api.js');
+
+	// are we running on FlowFuse?
+	const ffHost = RED.settings.flowforge?.forgeURL || null;
+	const ffTeamId = RED.settings.flowforge?.teamID || null;
+	const ffTablesToken = RED.settings.flowforge?.tables?.token || null;
 
 	function QueryNode(config) {
 		const node = this;
@@ -39,10 +46,10 @@ module.exports = function (RED) {
 		node.query = config.query;
 		node.split = config.split;
 		node.rowsPerMsg = config.rowsPerMsg;
-		node.config = RED.nodes.getNode(config.queryConfig) || {
-			pgPool: {
-				totalCount: 0,
-			},
+
+		node.databases = null;
+		node.pgPool = {
+			totalCount: 0
 		};
 
 		// Declare the ability of this node to provide ticks upstream for back-pressure
@@ -74,14 +81,14 @@ module.exports = function (RED) {
 						fill = 'red';
 					} else if (nbQueue <= 0) {
 						fill = 'blue';
-					} else if (nbQueue <= node.config.pgPool.totalCount) {
+					} else if (nbQueue <= node.pgPool.totalCount) {
 						fill = 'green';
 					} else {
 						fill = 'yellow';
 					}
 					node.status({
 						fill: fill,
-						shape: hasError || nbQueue > node.config.pgPool.totalCount ? 'ring' : 'dot',
+						shape: hasError || nbQueue > node.pgPool.totalCount ? 'ring' : 'dot',
 						text: 'Queue: ' + nbQueue + (hasError ? ' Error!' : ''),
 					});
 					hasError = false;
@@ -89,7 +96,34 @@ module.exports = function (RED) {
 				}, updateStatusPeriodMs);
 			}
 		};
-		updateStatus(0, false);
+
+		if (ffTeamId) {
+			try {
+				node.databases = ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
+					if (databases.length > 0) {
+						const creds = databases[0].credentials;
+						node.pgPool = new Pool({
+							user: creds.user,
+							password: creds.password,
+							host: creds.host,
+							port: creds.port,
+							database: creds.database,
+							ssl: creds.ssl
+						});
+						updateStatus(0, false);
+					} else {
+						node.warn('No databases found in FlowFuse Tables for your team.');
+						node.status({
+							fill: 'red',
+							shape: 'ring',
+							text: 'No databases found.',
+						});
+					}
+				});
+			} catch (err) {
+				console.error('Error getting FlowFuse Tables', err);
+			}
+		}
 
 		node.on('input', async (msg, send, done) => {
 			// 'send' and 'done' require Node-RED 1.0+
@@ -157,7 +191,7 @@ module.exports = function (RED) {
 
 				try {
 					// connect to the database
-					client = await node.config.pgPool.connect();
+					client = await node.pgPool.connect();
 
 					let params = [];
 					if (msg.params && msg.params.length > 0) {
@@ -267,5 +301,10 @@ module.exports = function (RED) {
 		});
 	}
 
-	RED.nodes.registerType('tables-query', QueryNode);
+	if (ffHost) {
+		RED.nodes.registerType('tables-query', QueryNode);
+	} else {
+		// report as warning that the node is not configured
+		RED.log.warn('@flowfuse/tables-query: This node can only be used in Node-RED Instances running with FlowFuse');
+	}
 };
