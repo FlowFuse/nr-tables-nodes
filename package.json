@@ -49,8 +49,7 @@
 	"node-red": {
 		"version": ">=3.1.0",
 		"nodes": {
-			"tables-query": "nodes/query.js",
-			"tables-query-config": "nodes/query-config.js"
+			"tables-query": "nodes/query.js"
 		}
 	},
 	"dependencies": {
