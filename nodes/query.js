@@ -96,8 +96,7 @@ module.exports = function (RED) {
 				}, updateStatusPeriodMs);
 			}
 		};
-
-		if (ffTeamId) {
+		if (ffTablesToken) {
 			try {
 				node.databases = ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
 					if (databases.length > 0) {
@@ -123,6 +122,13 @@ module.exports = function (RED) {
 			} catch (err) {
 				console.error('Error getting FlowFuse Tables', err);
 			}
+		} else {
+			node.status({
+				fill: 'red',
+				shape: 'ring',
+				text: 'Not Available',
+			});
+			node.warn('FlowFuse Tables is not available to this Instance. You may need to upgrade your Instance, or upgrade your Team to a higher plan.');
 		}
 
 		node.on('input', async (msg, send, done) => {
