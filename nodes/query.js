@@ -116,7 +116,7 @@ module.exports = function (RED) {
 						node.status({
 							fill: 'red',
 							shape: 'ring',
-							text: 'No databases found.',
+							text: 'No Databases',
 						});
 					}
 				});
@@ -189,113 +189,118 @@ module.exports = function (RED) {
 				updateStatus(+1);
 				downstreamReady = true;
 
-				try {
-					// connect to the database
-					client = await node.pgPool.connect();
+				if (node.pgPool && node.pgPool.connect) {
+					try {
+						// connect to the database
+						client = await node.pgPool.connect();
 
-					let params = [];
-					if (msg.params && msg.params.length > 0) {
-						params = msg.params;
-					} else if (msg.queryParameters && (typeof msg.queryParameters === 'object')) {
-						({ text: query, values: params } = named.convert(query, msg.queryParameters));
-					}
+						let params = [];
+						if (msg.params && msg.params.length > 0) {
+							params = msg.params;
+						} else if (msg.queryParameters && (typeof msg.queryParameters === 'object')) {
+							({ text: query, values: params } = named.convert(query, msg.queryParameters));
+						}
 
-					if (node.split) {
-						let partsIndex = 0;
-						delete msg.complete;
+						if (node.split) {
+							let partsIndex = 0;
+							delete msg.complete;
 
-						cursor = client.query(new Cursor(query, params));
+							cursor = client.query(new Cursor(query, params));
 
-						const cursorcallback = (err, rows, result) => {
-							if (err) {
-								handleError(err);
-							} else {
-								const complete = rows.length < node.rowsPerMsg;
-								if (complete) {
-									handleDone(false);
+							const cursorcallback = (err, rows, result) => {
+								if (err) {
+									handleError(err);
+								} else {
+									const complete = rows.length < node.rowsPerMsg;
+									if (complete) {
+										handleDone(false);
+									}
+									const msg2 = Object.assign({}, msg, {
+										payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
+										pgsql: {
+											command: result.command,
+											rowCount: result.rowCount,
+										},
+										parts: {
+											id: partsId,
+											type: 'array',
+											index: partsIndex,
+										},
+									});
+									if (msg.parts) {
+										msg2.parts.parts = msg.parts;
+									}
+									if (complete) {
+										msg2.parts.count = partsIndex + 1;
+										msg2.complete = true;
+									}
+									partsIndex++;
+									downstreamReady = false;
+									send(msg2);
+									if (complete) {
+										if (tickUpstreamNode) {
+											tickUpstreamNode.receive({ tick: true });
+										}
+										if (done) {
+											done();
+										}
+									} else {
+										getNextRows();
+									}
 								}
-								const msg2 = Object.assign({}, msg, {
-									payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
-									pgsql: {
-										command: result.command,
-										rowCount: result.rowCount,
-									},
-									parts: {
-										id: partsId,
-										type: 'array',
-										index: partsIndex,
-									},
-								});
-								if (msg.parts) {
-									msg2.parts.parts = msg.parts;
+							};
+
+							getNextRows = () => {
+								if (downstreamReady) {
+									cursor.read(node.rowsPerMsg || 1, cursorcallback);
 								}
-								if (complete) {
-									msg2.parts.count = partsIndex + 1;
-									msg2.complete = true;
-								}
-								partsIndex++;
-								downstreamReady = false;
-								send(msg2);
-								if (complete) {
+							};
+						} else {
+							getNextRows = async () => {
+								try {
+									const result = await client.query(query, params);
+									if (result.length) {
+										// Multiple queries
+										msg.payload = [];
+										msg.pgsql = [];
+										for (const r of result) {
+											msg.payload = msg.payload.concat(r.rows);
+											msg.pgsql.push({
+												command: r.command,
+												rowCount: r.rowCount,
+												rows: r.rows,
+											});
+										}
+									} else {
+										msg.payload = result.rows;
+										msg.pgsql = {
+											command: result.command,
+											rowCount: result.rowCount,
+										};
+									}
+
+									handleDone();
+									downstreamReady = false;
+									send(msg);
 									if (tickUpstreamNode) {
 										tickUpstreamNode.receive({ tick: true });
 									}
 									if (done) {
 										done();
 									}
-								} else {
-									getNextRows();
+								} catch (ex) {
+									handleError(ex);
 								}
-							}
-						};
+							};
+						}
 
-						getNextRows = () => {
-							if (downstreamReady) {
-								cursor.read(node.rowsPerMsg || 1, cursorcallback);
-							}
-						};
-					} else {
-						getNextRows = async () => {
-							try {
-								const result = await client.query(query, params);
-								if (result.length) {
-									// Multiple queries
-									msg.payload = [];
-									msg.pgsql = [];
-									for (const r of result) {
-										msg.payload = msg.payload.concat(r.rows);
-										msg.pgsql.push({
-											command: r.command,
-											rowCount: r.rowCount,
-											rows: r.rows,
-										});
-									}
-								} else {
-									msg.payload = result.rows;
-									msg.pgsql = {
-										command: result.command,
-										rowCount: result.rowCount,
-									};
-								}
-
-								handleDone();
-								downstreamReady = false;
-								send(msg);
-								if (tickUpstreamNode) {
-									tickUpstreamNode.receive({ tick: true });
-								}
-								if (done) {
-									done();
-								}
-							} catch (ex) {
-								handleError(ex);
-							}
-						};
+						getNextRows();
+					} catch (err) {
+						handleError(err);
 					}
-
-					getNextRows();
-				} catch (err) {
-					handleError(err);
+				} else {
+					// User has not setup a database in FlowFuse yet
+					node.error('No database found. Please setup a database in FlowFuse Tables.');
 				}
 			}
 		});
