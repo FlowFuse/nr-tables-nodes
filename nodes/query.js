@@ -47,7 +47,6 @@ module.exports = function (RED) {
 		node.split = config.split;
 		node.rowsPerMsg = config.rowsPerMsg;
 
-		node.databases = null;
 		node.pgPool = {
 			totalCount: 0
 		};
@@ -98,7 +97,7 @@ module.exports = function (RED) {
 		};
 		if (ffTablesToken) {
 			try {
-				node.databases = ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
+				ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
 					if (databases.length > 0) {
 						const creds = databases[0].credentials;
 						node.pgPool = new Pool({
