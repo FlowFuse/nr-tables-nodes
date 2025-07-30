@@ -30,7 +30,14 @@ function findInputNodeId(toNode, filter = null) {
 module.exports = function (RED) {
 	const Mustache = require('mustache');
 	const Cursor = require('pg-cursor');
+	const { Pool } = require('pg');
 	const named = require('../node-postgres-named.js');
+	const ffAPI = require('./utils/ff-api.js');
+
+	// are we running on FlowFuse?
+	const ffHost = RED.settings.flowforge?.forgeURL || null;
+	const ffTeamId = RED.settings.flowforge?.teamID || null;
+	const ffTablesToken = RED.settings.flowforge?.tables?.token || null;
 
 	function QueryNode(config) {
 		const node = this;
@@ -39,10 +46,9 @@ module.exports = function (RED) {
 		node.query = config.query;
 		node.split = config.split;
 		node.rowsPerMsg = config.rowsPerMsg;
-		node.config = RED.nodes.getNode(config.queryConfig) || {
-			pgPool: {
-				totalCount: 0,
-			},
+
+		node.pgPool = {
+			totalCount: 0
 		};
 
 		// Declare the ability of this node to provide ticks upstream for back-pressure
@@ -74,14 +80,14 @@ module.exports = function (RED) {
 						fill = 'red';
 					} else if (nbQueue <= 0) {
 						fill = 'blue';
-					} else if (nbQueue <= node.config.pgPool.totalCount) {
+					} else if (nbQueue <= node.pgPool.totalCount) {
 						fill = 'green';
 					} else {
 						fill = 'yellow';
 					}
 					node.status({
 						fill: fill,
-						shape: hasError || nbQueue > node.config.pgPool.totalCount ? 'ring' : 'dot',
+						shape: hasError || nbQueue > node.pgPool.totalCount ? 'ring' : 'dot',
 						text: 'Queue: ' + nbQueue + (hasError ? ' Error!' : ''),
 					});
 					hasError = false;
@@ -89,7 +95,40 @@ module.exports = function (RED) {
 				}, updateStatusPeriodMs);
 			}
 		};
-		updateStatus(0, false);
+		if (ffTablesToken) {
+			try {
+				ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
+					if (databases.length > 0) {
+						const creds = databases[0].credentials;
+						node.pgPool = new Pool({
+							user: creds.user,
+							password: creds.password,
+							host: creds.host,
+							port: creds.port,
+							database: creds.database,
+							ssl: creds.ssl
+						});
+						updateStatus(0, false);
+					} else {
+						node.warn('No databases found in FlowFuse Tables for your team.');
+						node.status({
+							fill: 'red',
+							shape: 'ring',
+							text: 'No Databases',
+						});
+					}
+				});
+			} catch (err) {
+				console.error('Error getting FlowFuse Tables', err);
+			}
+		} else {
+			node.status({
+				fill: 'red',
+				shape: 'ring',
+				text: 'Not Available',
+			});
+			node.warn('FlowFuse Tables is not available to this Instance. You may need to upgrade your Instance, or upgrade your Team to a higher plan.');
+		}
 
 		node.on('input', async (msg, send, done) => {
 			// 'send' and 'done' require Node-RED 1.0+
@@ -155,117 +194,127 @@ module.exports = function (RED) {
 				updateStatus(+1);
 				downstreamReady = true;
 
-				try {
-					// connect to the database
-					client = await node.config.pgPool.connect();
+				if (node.pgPool && node.pgPool.connect) {
+					try {
+						// connect to the database
+						client = await node.pgPool.connect();
 
-					let params = [];
-					if (msg.params && msg.params.length > 0) {
-						params = msg.params;
-					} else if (msg.queryParameters && (typeof msg.queryParameters === 'object')) {
-						({ text: query, values: params } = named.convert(query, msg.queryParameters));
-					}
+						let params = [];
+						if (msg.params && msg.params.length > 0) {
+							params = msg.params;
+						} else if (msg.queryParameters && (typeof msg.queryParameters === 'object')) {
+							({ text: query, values: params } = named.convert(query, msg.queryParameters));
+						}
 
-					if (node.split) {
-						let partsIndex = 0;
-						delete msg.complete;
+						if (node.split) {
+							let partsIndex = 0;
+							delete msg.complete;
 
-						cursor = client.query(new Cursor(query, params));
+							cursor = client.query(new Cursor(query, params));
 
-						const cursorcallback = (err, rows, result) => {
-							if (err) {
-								handleError(err);
-							} else {
-								const complete = rows.length < node.rowsPerMsg;
-								if (complete) {
-									handleDone(false);
+							const cursorcallback = (err, rows, result) => {
+								if (err) {
+									handleError(err);
+								} else {
+									const complete = rows.length < node.rowsPerMsg;
+									if (complete) {
+										handleDone(false);
+									}
+									const msg2 = Object.assign({}, msg, {
+										payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
+										pgsql: {
+											command: result.command,
+											rowCount: result.rowCount,
+										},
+										parts: {
+											id: partsId,
+											type: 'array',
+											index: partsIndex,
+										},
+									});
+									if (msg.parts) {
+										msg2.parts.parts = msg.parts;
+									}
+									if (complete) {
+										msg2.parts.count = partsIndex + 1;
+										msg2.complete = true;
+									}
+									partsIndex++;
+									downstreamReady = false;
+									send(msg2);
+									if (complete) {
+										if (tickUpstreamNode) {
+											tickUpstreamNode.receive({ tick: true });
+										}
+										if (done) {
+											done();
+										}
+									} else {
+										getNextRows();
+									}
 								}
-								const msg2 = Object.assign({}, msg, {
-									payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
-									pgsql: {
-										command: result.command,
-										rowCount: result.rowCount,
-									},
-									parts: {
-										id: partsId,
-										type: 'array',
-										index: partsIndex,
-									},
-								});
-								if (msg.parts) {
-									msg2.parts.parts = msg.parts;
+							};
+
+							getNextRows = () => {
+								if (downstreamReady) {
+									cursor.read(node.rowsPerMsg || 1, cursorcallback);
 								}
-								if (complete) {
-									msg2.parts.count = partsIndex + 1;
-									msg2.complete = true;
-								}
-								partsIndex++;
-								downstreamReady = false;
-								send(msg2);
-								if (complete) {
+							};
+						} else {
+							getNextRows = async () => {
+								try {
+									const result = await client.query(query, params);
+									if (result.length) {
+										// Multiple queries
+										msg.payload = [];
+										msg.pgsql = [];
+										for (const r of result) {
+											msg.payload = msg.payload.concat(r.rows);
+											msg.pgsql.push({
+												command: r.command,
+												rowCount: r.rowCount,
+												rows: r.rows,
+											});
+										}
+									} else {
+										msg.payload = result.rows;
+										msg.pgsql = {
+											command: result.command,
+											rowCount: result.rowCount,
+										};
+									}
+
+									handleDone();
+									downstreamReady = false;
+									send(msg);
 									if (tickUpstreamNode) {
 										tickUpstreamNode.receive({ tick: true });
 									}
 									if (done) {
 										done();
 									}
-								} else {
-									getNextRows();
+								} catch (ex) {
+									handleError(ex);
 								}
-							}
-						};
+							};
+						}
 
-						getNextRows = () => {
-							if (downstreamReady) {
-								cursor.read(node.rowsPerMsg || 1, cursorcallback);
-							}
-						};
-					} else {
-						getNextRows = async () => {
-							try {
-								const result = await client.query(query, params);
-								if (result.length) {
-									// Multiple queries
-									msg.payload = [];
-									msg.pgsql = [];
-									for (const r of result) {
-										msg.payload = msg.payload.concat(r.rows);
-										msg.pgsql.push({
-											command: r.command,
-											rowCount: r.rowCount,
-											rows: r.rows,
-										});
-									}
-								} else {
-									msg.payload = result.rows;
-									msg.pgsql = {
-										command: result.command,
-										rowCount: result.rowCount,
-									};
-								}
-
-								handleDone();
-								downstreamReady = false;
-								send(msg);
-								if (tickUpstreamNode) {
-									tickUpstreamNode.receive({ tick: true });
-								}
-								if (done) {
-									done();
-								}
-							} catch (ex) {
-								handleError(ex);
-							}
-						};
+						getNextRows();
+					} catch (err) {
+						handleError(err);
 					}
-
-					getNextRows();
-				} catch (err) {
-					handleError(err);
+				} else {
+					// User has not setup a database in FlowFuse yet
+					node.error('No database found. Please setup a database in FlowFuse Tables.');
 				}
 			}
 		});
 	}
 
-	RED.nodes.registerType('tables-query', QueryNode);
+	if (ffHost) {
+		RED.nodes.registerType('tables-query', QueryNode);
+	} else {
+		// report as warning that the node is not configured
+		RED.log.warn('@flowfuse/tables-query: This node can only be used in Node-RED Instances running with FlowFuse');
+	}
 };
