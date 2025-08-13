@@ -67,6 +67,7 @@
 		"mocha": "^11.1.0"
 	},
 	"scripts": {
+		"lint": "eslint .",
 		"eslint": "eslint .",
 		"eslint_fix": "eslint --fix .",
 		"markdownlint": "markdownlint '**/*.md'",
