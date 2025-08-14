@@ -247,7 +247,8 @@ module.exports = function (RED) {
 										// send all of the messages as quick as possible
 										downstreamReady = true;
 									}
-									if (msg2.complete) {
+									if (typeof msg2.payload === 'undefined' && msg2.complete) {
+										// this contains no data, and is just a "complete" message
 										send([null, msg2]);
 									} else {
 										send([msg2, null]);
