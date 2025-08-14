@@ -18,12 +18,13 @@
 			},
 			rowsPerMsg: {
 				value: 1,
-			}
+			},
+			outputs: {
+				value: 1,
+			},
 		},
 		inputs: 1,
-		outputs: function () {
-			return this.split ? 2 : 1;
-		},
+		outputs: 1,
 		icon: 'flowfuse.svg',
 		align: 'left',
 		paletteLabel: 'query',
@@ -43,13 +44,13 @@
 				if ($('#node-input-split').is(':checked')) {
 					$('#node-input-rowsPerMsg-container').show();
 					// Set number of outputs to 2 when split is enabled
-					this.outputs = 2;
+					$('#node-input-outputs').val(2);
 				} else {
 					$('#node-input-rowsPerMsg-container').hide();
 					// Set number of outputs back to 1 when split is disabled
-					this.outputs = 1;
+					$('#node-input-outputs').val(1);
 				}
-			}.bind(this));
+			});
 
 			$('#node-input-rowsPerMsg').value = this.split ? this.rowsPerMsg : 1;
 			this.editor = RED.editor.createEditor({
@@ -61,7 +62,8 @@
 		},
 		oneditsave: function () {
 			$('#node-input-query').val(this.editor.getValue());
-			this.outputs = this.split ? 2 : 1;
+			const split = $('#node-input-split').is(':checked');
+			$('#node-input-outputs').val(split ? 2 : 1);
 			delete this.editor;
 		},
 	});
@@ -87,6 +89,7 @@
 	</div>
     <h4 style="margin-bottom: 0.5rem;">Output</h4>
 	<div class="form-row">
+		<input type="hidden" id="node-input-outputs" value="1">
 		<input type="checkbox" id="node-input-split" style="display: inline-block; width: auto; vertical-align: top;" />
 		<label for="node-input-split" style="width: auto;">
 			<span data-i18n="tables-query.label.split"></span>
