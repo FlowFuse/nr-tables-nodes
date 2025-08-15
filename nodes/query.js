@@ -240,7 +240,7 @@ module.exports = function (RED) {
 										msg2.complete = true;
 									}
 									partsIndex++;
-									if (node.enableBackPressure) {
+									if (config.enableBackPressure) {
 										// await msg.tick before sending further messages
 										downstreamReady = false;
 									} else {
