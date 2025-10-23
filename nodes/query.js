@@ -116,8 +116,8 @@ module.exports = function (RED) {
 						text: 'No Databases',
 					});
 				}
-			}).catch(e => {
-				node.error('Error getting FlowFuse Tables', err);
+			}).catch(err => {
+				node.error(err);
 				node.status({
 					fill: 'red',
 					shape: 'ring',
