@@ -113,7 +113,7 @@ module.exports = function (RED) {
 					node.status({
 						fill: 'red',
 						shape: 'ring',
-						text: 'No Databases',
+						text: 'No Databases'
 					});
 				}
 			}).catch(err => {
