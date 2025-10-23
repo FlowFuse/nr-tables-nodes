@@ -96,31 +96,34 @@ module.exports = function (RED) {
 			}
 		};
 		if (ffTablesToken) {
-			try {
-				ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
-					if (databases.length > 0) {
-						const creds = databases[0].credentials;
-						node.pgPool = new Pool({
-							user: creds.user,
-							password: creds.password,
-							host: creds.host,
-							port: creds.port,
-							database: creds.database,
-							ssl: creds.ssl
-						});
-						updateStatus(0, false);
-					} else {
-						node.warn('No databases found in FlowFuse Tables for your team.');
-						node.status({
-							fill: 'red',
-							shape: 'ring',
-							text: 'No Databases',
-						});
-					}
+			ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
+				if (databases.length > 0) {
+					const creds = databases[0].credentials;
+					node.pgPool = new Pool({
+						user: creds.user,
+						password: creds.password,
+						host: creds.host,
+						port: creds.port,
+						database: creds.database,
+						ssl: creds.ssl
+					});
+					updateStatus(0, false);
+				} else {
+					node.warn('No databases found in FlowFuse Tables for your team.');
+					node.status({
+						fill: 'red',
+						shape: 'ring',
+						text: 'No Databases'
+					});
+				}
+			}).catch(err => {
+				node.error(err);
+				node.status({
+					fill: 'red',
+					shape: 'ring',
+					text: 'error'
 				});
-			} catch (err) {
-				console.error('Error getting FlowFuse Tables', err);
-			}
+			});
 		} else {
 			node.status({
 				fill: 'red',
