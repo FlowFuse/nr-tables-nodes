@@ -121,7 +121,7 @@ module.exports = function (RED) {
 				node.status({
 					fill: 'red',
 					shape: 'ring',
-					text: 'error',
+					text: 'error'
 				});
 			});
 		} else {
