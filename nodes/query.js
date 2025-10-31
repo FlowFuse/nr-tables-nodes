@@ -96,31 +96,29 @@ module.exports = function (RED) {
 			}
 		};
 		if (ffTablesToken) {
-			try {
-				ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
-					if (databases.length > 0) {
-						const creds = databases[0].credentials;
-						node.pgPool = new Pool({
-							user: creds.user,
-							password: creds.password,
-							host: creds.host,
-							port: creds.port,
-							database: creds.database,
-							ssl: creds.ssl
-						});
-						updateStatus(0, false);
-					} else {
-						node.warn('No databases found in FlowFuse Tables for your team.');
-						node.status({
-							fill: 'red',
-							shape: 'ring',
-							text: 'No Databases',
-						});
-					}
-				});
-			} catch (err) {
+			ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
+				if (databases.length > 0) {
+					const creds = databases[0].credentials;
+					node.pgPool = new Pool({
+						user: creds.user,
+						password: creds.password,
+						host: creds.host,
+						port: creds.port,
+						database: creds.database,
+						ssl: creds.ssl
+					});
+					updateStatus(0, false);
+				} else {
+					node.warn('No databases found in FlowFuse Tables for your team.');
+					node.status({
+						fill: 'red',
+						shape: 'ring',
+						text: 'No Databases',
+					});
+				}
+			}).catch((err) => {
 				console.error('Error getting FlowFuse Tables', err);
-			}
+			});
 		} else {
 			node.status({
 				fill: 'red',
@@ -212,65 +210,84 @@ module.exports = function (RED) {
 
 							cursor = client.query(new Cursor(query, params));
 
-							const cursorCallback = (err, rows, result) => {
-								if (err) {
-									handleError(err);
+							let peekRows = [];
+							let resultMeta = null;
+
+							// Helper to send the next message, using peekRows as the buffer
+							const sendNext = (nextRows, isLast) => {
+								const msg2 = Object.assign({}, msg, {
+									payload: (node.rowsPerMsg || 1) > 1 ? nextRows : nextRows[0],
+									pgsql: {
+										command: resultMeta ? resultMeta.command : undefined,
+										rowCount: resultMeta ? resultMeta.rowCount : undefined
+									},
+									parts: {
+										id: partsId,
+										type: 'array',
+										index: partsIndex
+									}
+								});
+								if (msg.parts) {
+									msg2.parts.parts = msg.parts;
+								}
+								if (isLast) {
+									msg2.parts.count = partsIndex + 1;
+									msg2.complete = true;
+								}
+								partsIndex++;
+								if (config.enableBackPressure) {
+									downstreamReady = false;
 								} else {
-									const complete = rows.length < node.rowsPerMsg;
-									if (complete) {
-										handleDone(false);
+									downstreamReady = true;
+								}
+								send(msg2);
+								if (isLast) {
+									if (tickUpstreamNode) {
+										tickUpstreamNode.receive({ tick: true });
 									}
-									const msg2 = Object.assign({}, msg, {
-										payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
-										pgsql: {
-											command: result.command,
-											rowCount: result.rowCount,
-										},
-										parts: {
-											id: partsId,
-											type: 'array',
-											index: partsIndex,
-										},
-									});
-									if (msg.parts) {
-										msg2.parts.parts = msg.parts;
-									}
-									if (complete) {
-										msg2.parts.count = partsIndex + 1;
-										msg2.complete = true;
-									}
-									partsIndex++;
-									if (config.enableBackPressure) {
-										// await msg.tick before sending further messages
-										downstreamReady = false;
-									} else {
-										// send all of the messages as quick as possible
-										downstreamReady = true;
-									}
-									if (typeof msg2.payload === 'undefined' && msg2.complete) {
-										// this contains no data, and is just a "complete" message
-										send([null, msg2]);
-									} else {
-										send([msg2, null]);
-									}
-									if (complete) {
-										if (tickUpstreamNode) {
-											tickUpstreamNode.receive({ tick: true });
-										}
-										if (done) {
-											done();
-										}
-									} else {
-										getNextRows();
+									if (done) {
+										done();
 									}
 								}
 							};
 
-							getNextRows = () => {
-								if (downstreamReady) {
-									cursor.read(node.rowsPerMsg || 1, cursorCallback);
-								}
+							// Read the first batch to prime the peek buffer
+							const primePeek = () => {
+								cursor.read(node.rowsPerMsg || 1, (err, rows, result) => {
+									if (err) {
+										handleError(err);
+									} else {
+										resultMeta = result;
+										peekRows = rows;
+										getNextRows();
+									}
+								});
 							};
+
+							getNextRows = () => {
+								if (!downstreamReady) return;
+								if (!peekRows || peekRows.length === 0) {
+									// No more data, nothing to send
+									return;
+								}
+								// Read the next batch to peek ahead
+								cursor.read(node.rowsPerMsg || 1, (err, nextRows) => {
+									if (err) {
+										handleError(err);
+									} else {
+										const isLast = !nextRows || nextRows.length === 0;
+										sendNext(peekRows, isLast);
+										if (isLast) {
+											handleDone(false);
+										} else {
+											peekRows = nextRows;
+											getNextRows();
+										}
+									}
+								});
+							};
+
+							primePeek();
 						} else {
 							getNextRows = async () => {
 								try {
