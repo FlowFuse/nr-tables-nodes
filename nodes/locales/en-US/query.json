@@ -4,7 +4,8 @@
 			"name": "Name",
 			"query": "Query",
 			"split": "Split results in multiple messages",
-			"rowsPerMsg": "Rows per message"
+			"rowsPerMsg": "Rows per Message:",
+			"enableBackPressure": "Enable Backpressure:"
 		}
 	}
 }

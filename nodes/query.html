@@ -13,9 +13,15 @@
 			split: {
 				value: false,
 			},
+			enableBackPressure: {
+				value: false,
+			},
 			rowsPerMsg: {
 				value: 1,
-			}
+			},
+			outputs: {
+				value: 1,
+			},
 		},
 		inputs: 1,
 		outputs: 1,
@@ -34,11 +40,15 @@
 
 			// when node-input-split is modified, react:
 			$('#node-input-split').on('change', function () {
-				// if checked, show the rowsPerMsg input
+				// if checked, show the rowsPerMsg input and set outputs to 2
 				if ($('#node-input-split').is(':checked')) {
 					$('#node-input-rowsPerMsg-container').show();
+					// Set number of outputs to 2 when split is enabled
+					$('#node-input-outputs').val(2);
 				} else {
 					$('#node-input-rowsPerMsg-container').hide();
+					// Set number of outputs back to 1 when split is disabled
+					$('#node-input-outputs').val(1);
 				}
 			});
 
@@ -52,12 +62,14 @@
 		},
 		oneditsave: function () {
 			$('#node-input-query').val(this.editor.getValue());
+			const split = $('#node-input-split').is(':checked');
+			$('#node-input-outputs').val(split ? 2 : 1);
 			delete this.editor;
 		},
 	});
 </script>
 
-<script type="text/x-red" data-template-name="tables-query">
+<script type="text/html" data-template-name="tables-query">
 	<div class="form-row">
 		<label for="node-input-name">
 			<i class="icon-tag"></i>
@@ -77,15 +89,40 @@
 	</div>
     <h4 style="margin-bottom: 0.5rem;">Output</h4>
 	<div class="form-row">
+		<input type="hidden" id="node-input-outputs" value="1">
 		<input type="checkbox" id="node-input-split" style="display: inline-block; width: auto; vertical-align: top;" />
 		<label for="node-input-split" style="width: auto;">
 			<span data-i18n="tables-query.label.split"></span>
 		</label>
 	</div>
 	<div class="form-row" id="node-input-rowsPerMsg-container">
-		<label for="node-input-rowsPerMsg">
-			<span data-i18n="tables-query.label.rowsPerMsg"></span>
-		</label>
-		<input type="number" id="node-input-rowsPerMsg" placeholder="1" value="1" min="1" />
+		<div class="form-flex-row">
+			<label for="node-input-rowsPerMsg" style="width: auto;">
+				<span data-i18n="tables-query.label.rowsPerMsg"></span>
+			</label>
+			<input type="number" id="node-input-rowsPerMsg" placeholder="1" value="1" min="1" style="width: 100px; flex-grow: 1;" />
+		</div>
+		<div>
+			<input type="checkbox" id="node-input-enableBackPressure" style="display: inline-block; width: auto; vertical-align: top;" />
+			<label for="node-input-enableBackPressure" style="width: auto;">
+				<span data-i18n="tables-query.label.enableBackPressure"></span>
+			</label>
+		</div>
 	</div>
 </script>
+
+<style>
+	#node-input-rowsPerMsg-container {
+		padding-left: 24px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin-top: -6px;
+	}
+	.form-flex-row {
+		display: flex;
+		flex-direction: row;
+		gap: 6px;
+		align-items: center;
+	}
+</style>

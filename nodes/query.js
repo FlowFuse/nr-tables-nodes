@@ -215,7 +215,7 @@ module.exports = function (RED) {
 
 							cursor = client.query(new Cursor(query, params));
 
-							const cursorcallback = (err, rows, result) => {
+							const cursorCallback = (err, rows, result) => {
 								if (err) {
 									handleError(err);
 								} else {
@@ -243,8 +243,19 @@ module.exports = function (RED) {
 										msg2.complete = true;
 									}
 									partsIndex++;
-									downstreamReady = false;
-									send(msg2);
+									if (config.enableBackPressure) {
+										// await msg.tick before sending further messages
+										downstreamReady = false;
+									} else {
+										// send all of the messages as quick as possible
+										downstreamReady = true;
+									}
+									if (typeof msg2.payload === 'undefined' && msg2.complete) {
+										// this contains no data, and is just a "complete" message
+										send([null, msg2]);
+									} else {
+										send([msg2, null]);
+									}
 									if (complete) {
 										if (tickUpstreamNode) {
 											tickUpstreamNode.receive({ tick: true });
@@ -260,7 +271,7 @@ module.exports = function (RED) {
 
 							getNextRows = () => {
 								if (downstreamReady) {
-									cursor.read(node.rowsPerMsg || 1, cursorcallback);
+									cursor.read(node.rowsPerMsg || 1, cursorCallback);
 								}
 							};
 						} else {
