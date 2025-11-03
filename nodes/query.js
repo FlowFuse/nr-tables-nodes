@@ -33,6 +33,7 @@ module.exports = function (RED) {
 	const { Pool } = require('pg');
 	const named = require('../node-postgres-named.js');
 	const ffAPI = require('./utils/ff-api.js');
+	const { columnsQuery, pksQuery, fksQuery, indexesQuery, commentsQuery, generatePostgreSqlDdl } = require('./utils/table-hints.js');
 
 	// are we running on FlowFuse?
 	const ffHost = RED.settings.flowforge?.forgeURL || null;
@@ -202,107 +203,124 @@ module.exports = function (RED) {
 						// connect to the database
 						client = await node.pgPool.connect();
 
-						let params = [];
-						if (msg.params && msg.params.length > 0) {
-							params = msg.params;
-						} else if (msg.queryParameters && (typeof msg.queryParameters === 'object')) {
-							({ text: query, values: params } = named.convert(query, msg.queryParameters));
-						}
+						if (msg.ddl) {
+							client = await node.pgPool.connect();
+							const columns = await client.query(columnsQuery);
+							const pks = await client.query(pksQuery);
+							const fks = await client.query(fksQuery);
+							const indexes = await client.query(indexesQuery);
+							const comments = await client.query(commentsQuery);
 
-						if (node.split) {
-							let partsIndex = 0;
-							delete msg.complete;
+							const ddl = generatePostgreSqlDdl(columns.rows, pks.rows, fks.rows, indexes.rows, comments.rows);
+							msg.payload = ddl;
+							handleDone(false);
+							send(msg);
+							if (done) {
+								done();
+							}
+						} else {
+							let params = [];
+							if (msg.params && msg.params.length > 0) {
+								params = msg.params;
+							} else if (msg.queryParameters && (typeof msg.queryParameters === 'object')) {
+								({ text: query, values: params } = named.convert(query, msg.queryParameters));
+							}
 
-							cursor = client.query(new Cursor(query, params));
+							if (node.split) {
+								let partsIndex = 0;
+								delete msg.complete;
 
-							const cursorcallback = (err, rows, result) => {
-								if (err) {
-									handleError(err);
-								} else {
-									const complete = rows.length < node.rowsPerMsg;
-									if (complete) {
-										handleDone(false);
+								cursor = client.query(new Cursor(query, params));
+
+								const cursorcallback = (err, rows, result) => {
+									if (err) {
+										handleError(err);
+									} else {
+										const complete = rows.length < node.rowsPerMsg;
+										if (complete) {
+											handleDone(false);
+										}
+										const msg2 = Object.assign({}, msg, {
+											payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
+											pgsql: {
+												command: result.command,
+												rowCount: result.rowCount,
+											},
+											parts: {
+												id: partsId,
+												type: 'array',
+												index: partsIndex,
+											},
+										});
+										if (msg.parts) {
+											msg2.parts.parts = msg.parts;
+										}
+										if (complete) {
+											msg2.parts.count = partsIndex + 1;
+											msg2.complete = true;
+										}
+										partsIndex++;
+										downstreamReady = false;
+										send(msg2);
+										if (complete) {
+											if (tickUpstreamNode) {
+												tickUpstreamNode.receive({ tick: true });
+											}
+											if (done) {
+												done();
+											}
+										} else {
+											getNextRows();
+										}
 									}
-									const msg2 = Object.assign({}, msg, {
-										payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
-										pgsql: {
-											command: result.command,
-											rowCount: result.rowCount,
-										},
-										parts: {
-											id: partsId,
-											type: 'array',
-											index: partsIndex,
-										},
-									});
-									if (msg.parts) {
-										msg2.parts.parts = msg.parts;
+								};
+
+								getNextRows = () => {
+									if (downstreamReady) {
+										cursor.read(node.rowsPerMsg || 1, cursorcallback);
 									}
-									if (complete) {
-										msg2.parts.count = partsIndex + 1;
-										msg2.complete = true;
-									}
-									partsIndex++;
-									downstreamReady = false;
-									send(msg2);
-									if (complete) {
+								};
+							} else {
+								getNextRows = async () => {
+									try {
+										const result = await client.query(query, params);
+										if (result.length) {
+											// Multiple queries
+											msg.payload = [];
+											msg.pgsql = [];
+											for (const r of result) {
+												msg.payload = msg.payload.concat(r.rows);
+												msg.pgsql.push({
+													command: r.command,
+													rowCount: r.rowCount,
+													rows: r.rows,
+												});
+											}
+										} else {
+											msg.payload = result.rows;
+											msg.pgsql = {
+												command: result.command,
+												rowCount: result.rowCount,
+											};
+										}
+
+										handleDone();
+										downstreamReady = false;
+										send(msg);
 										if (tickUpstreamNode) {
 											tickUpstreamNode.receive({ tick: true });
 										}
 										if (done) {
 											done();
 										}
-									} else {
-										getNextRows();
+									} catch (ex) {
+										handleError(ex);
 									}
-								}
-							};
+								};
+							}
 
-							getNextRows = () => {
-								if (downstreamReady) {
-									cursor.read(node.rowsPerMsg || 1, cursorcallback);
-								}
-							};
-						} else {
-							getNextRows = async () => {
-								try {
-									const result = await client.query(query, params);
-									if (result.length) {
-										// Multiple queries
-										msg.payload = [];
-										msg.pgsql = [];
-										for (const r of result) {
-											msg.payload = msg.payload.concat(r.rows);
-											msg.pgsql.push({
-												command: r.command,
-												rowCount: r.rowCount,
-												rows: r.rows,
-											});
-										}
-									} else {
-										msg.payload = result.rows;
-										msg.pgsql = {
-											command: result.command,
-											rowCount: result.rowCount,
-										};
-									}
-
-									handleDone();
-									downstreamReady = false;
-									send(msg);
-									if (tickUpstreamNode) {
-										tickUpstreamNode.receive({ tick: true });
-									}
-									if (done) {
-										done();
-									}
-								} catch (ex) {
-									handleError(ex);
-								}
-							};
+							getNextRows();
 						}
-
-						getNextRows();
 					} catch (err) {
 						handleError(err);
 					}
