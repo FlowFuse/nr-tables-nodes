@@ -1,3 +1,7 @@
+### 0.2.0
+
+ - Add Schema output to query node (#30) @hardillb
+
 ### 0.1.2
 
  - Update homepage URL in package.json to public facing documentation (#29) @Steve-Mcl

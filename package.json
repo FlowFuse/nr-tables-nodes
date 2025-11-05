@@ -1,6 +1,6 @@
 {
 	"name": "@flowfuse/nr-tables-nodes",
-	"version": "0.1.2",
+	"version": "0.2.0",
 	"description": "Nodes for use with the FlowFuse Tables offering, allowing developers to write and run queries against databases inside FlowFuse Tables.",
 	"homepage": "https://flowfuse.com/node-red/flowfuse/flowfuse-tables/",
 	"author": {
