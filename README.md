@@ -73,12 +73,14 @@ so this is less robust than numeric parameters.
 
 ### DDL output
 
-Passing an input message with `ddl` set to `true` will cause the node to output the DDL for the connected database
+Passing an input message with `ddl` set to `true` will cause the node to output the DDL for the connected database.
 
 ```js
 msg.ddl = true;
 return msg;
 ```
+
+NOTE: The DDL is intended to be a reference only. It is not guaranteed to be 100% complete, accurate or executable.
 
 ## Installation
 
