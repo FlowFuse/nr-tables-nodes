@@ -202,9 +202,11 @@ module.exports = function (RED) {
 					try {
 						// connect to the database
 						client = await node.pgPool.connect();
+						client.on('error', (err) => {
+							node.error(err, msg);
+						});
 
 						if (msg.ddl) {
-							client = await node.pgPool.connect();
 							const columns = await client.query(columnsQuery);
 							const pks = await client.query(pksQuery);
 							const fks = await client.query(fksQuery);
