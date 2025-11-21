@@ -203,7 +203,7 @@ module.exports = function (RED) {
 						// connect to the database
 						client = await node.pgPool.connect();
 						client.on('error', (err) => {
-							node.error(err, msg);
+							handleError(err);
 						});
 
 						if (msg.ddl) {
