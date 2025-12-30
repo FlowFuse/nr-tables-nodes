@@ -33,6 +33,7 @@ module.exports = function (RED) {
 	const { Pool } = require('pg');
 	const named = require('../node-postgres-named.js');
 	const ffAPI = require('./utils/ff-api.js');
+	const { columnsQuery, pksQuery, fksQuery, indexesQuery, commentsQuery, generatePostgreSqlDdl } = require('./utils/table-hints.js');
 
 	// are we running on FlowFuse?
 	const ffHost = RED.settings.flowforge?.forgeURL || null;
@@ -113,11 +114,16 @@ module.exports = function (RED) {
 					node.status({
 						fill: 'red',
 						shape: 'ring',
-						text: 'No Databases',
+						text: 'No Databases'
 					});
 				}
-			}).catch((err) => {
-				console.error('Error getting FlowFuse Tables', err);
+			}).catch(err => {
+				node.error(err);
+				node.status({
+					fill: 'red',
+					shape: 'ring',
+					text: 'error'
+				});
 			});
 		} else {
 			node.status({
@@ -196,137 +202,155 @@ module.exports = function (RED) {
 					try {
 						// connect to the database
 						client = await node.pgPool.connect();
+						client.on('error', (err) => {
+							handleError(err);
+						});
 
-						let params = [];
-						if (msg.params && msg.params.length > 0) {
-							params = msg.params;
-						} else if (msg.queryParameters && (typeof msg.queryParameters === 'object')) {
-							({ text: query, values: params } = named.convert(query, msg.queryParameters));
-						}
+						if (msg.ddl) {
+							const columns = await client.query(columnsQuery);
+							const pks = await client.query(pksQuery);
+							const fks = await client.query(fksQuery);
+							const indexes = await client.query(indexesQuery);
+							const comments = await client.query(commentsQuery);
 
-						if (node.split) {
-							let partsIndex = 0;
-							delete msg.complete;
+							const ddl = generatePostgreSqlDdl(columns.rows, pks.rows, fks.rows, indexes.rows, comments.rows);
+							msg.payload = ddl;
+							handleDone(false);
+							send(msg);
+							if (done) {
+								done();
+							}
+						} else {
+							let params = [];
+							if (msg.params && msg.params.length > 0) {
+								params = msg.params;
+							} else if (msg.queryParameters && (typeof msg.queryParameters === 'object')) {
+								({ text: query, values: params } = named.convert(query, msg.queryParameters));
+							}
 
-							cursor = client.query(new Cursor(query, params));
+							if (node.split) {
+								let partsIndex = 0;
+								delete msg.complete;
 
-							let peekRows = [];
-							let resultMeta = null;
+								cursor = client.query(new Cursor(query, params));
 
-							// Helper to send the next message, using peekRows as the buffer
-							const sendNext = (nextRows, isLast) => {
-								const msg2 = Object.assign({}, msg, {
-									payload: (node.rowsPerMsg || 1) > 1 ? nextRows : nextRows[0],
-									pgsql: {
-										command: resultMeta ? resultMeta.command : undefined,
-										rowCount: resultMeta ? resultMeta.rowCount : undefined
-									},
-									parts: {
-										id: partsId,
-										type: 'array',
-										index: partsIndex
+								let peekRows = [];
+								let resultMeta = null;
+
+								// Helper to send the next message, using peekRows as the buffer
+								const sendNext = (nextRows, isLast) => {
+									const msg2 = Object.assign({}, msg, {
+										payload: (node.rowsPerMsg || 1) > 1 ? nextRows : nextRows[0],
+										pgsql: {
+											command: resultMeta ? resultMeta.command : undefined,
+											rowCount: resultMeta ? resultMeta.rowCount : undefined
+										},
+										parts: {
+											id: partsId,
+											type: 'array',
+											index: partsIndex
+										}
+									});
+									if (msg.parts) {
+										msg2.parts.parts = msg.parts;
 									}
-								});
-								if (msg.parts) {
-									msg2.parts.parts = msg.parts;
-								}
-								if (isLast) {
-									msg2.parts.count = partsIndex + 1;
-									msg2.complete = true;
-								}
-								partsIndex++;
-								if (config.enableBackPressure) {
-									downstreamReady = false;
-								} else {
-									downstreamReady = true;
-								}
-								send(msg2);
-								if (isLast) {
-									if (tickUpstreamNode) {
-										tickUpstreamNode.receive({ tick: true });
+									if (isLast) {
+										msg2.parts.count = partsIndex + 1;
+										msg2.complete = true;
 									}
-									if (done) {
-										done();
-									}
-								}
-							};
-
-							// Read the first batch to prime the peek buffer
-							const primePeek = () => {
-								cursor.read(node.rowsPerMsg || 1, (err, rows, result) => {
-									if (err) {
-										handleError(err);
+									partsIndex++;
+									if (config.enableBackPressure) {
+										downstreamReady = false;
 									} else {
-										resultMeta = result;
-										peekRows = rows;
-										getNextRows();
+										downstreamReady = true;
 									}
-								});
-							};
+									send(msg2);
+									if (isLast) {
+										if (tickUpstreamNode) {
+											tickUpstreamNode.receive({ tick: true });
+										}
+										if (done) {
+											done();
+										}
+									}
+								};
 
-							getNextRows = () => {
-								if (!downstreamReady) return;
-								if (!peekRows || peekRows.length === 0) {
-									// No more data, nothing to send
-									return;
-								}
-								// Read the next batch to peek ahead
-								cursor.read(node.rowsPerMsg || 1, (err, nextRows) => {
-									if (err) {
-										handleError(err);
-									} else {
-										const isLast = !nextRows || nextRows.length === 0;
-										sendNext(peekRows, isLast);
-										if (isLast) {
-											handleDone(false);
+								// Read the first batch to prime the peek buffer
+								const primePeek = () => {
+									cursor.read(node.rowsPerMsg || 1, (err, rows, result) => {
+										if (err) {
+											handleError(err);
 										} else {
-											peekRows = nextRows;
+											resultMeta = result;
+											peekRows = rows;
 											getNextRows();
 										}
-									}
-								});
-							};
+									});
+								};
 
-							primePeek();
-						} else {
-							getNextRows = async () => {
-								try {
-									const result = await client.query(query, params);
-									if (result.length) {
-										// Multiple queries
-										msg.payload = [];
-										msg.pgsql = [];
-										for (const r of result) {
-											msg.payload = msg.payload.concat(r.rows);
-											msg.pgsql.push({
-												command: r.command,
-												rowCount: r.rowCount,
-												rows: r.rows,
-											});
+								getNextRows = () => {
+									if (!downstreamReady) return;
+									if (!peekRows || peekRows.length === 0) {
+										// No more data, nothing to send
+										return;
+									}
+									// Read the next batch to peek ahead
+									cursor.read(node.rowsPerMsg || 1, (err, nextRows) => {
+										if (err) {
+											handleError(err);
+										} else {
+											const isLast = !nextRows || nextRows.length === 0;
+											sendNext(peekRows, isLast);
+											if (isLast) {
+												handleDone(false);
+											} else {
+												peekRows = nextRows;
+												getNextRows();
+											}
 										}
-									} else {
-										msg.payload = result.rows;
-										msg.pgsql = {
-											command: result.command,
-											rowCount: result.rowCount,
-										};
-									}
+									});
+								};
 
-									handleDone();
-									downstreamReady = false;
-									send(msg);
-									if (tickUpstreamNode) {
-										tickUpstreamNode.receive({ tick: true });
+								primePeek();
+							} else {
+								getNextRows = async () => {
+									try {
+										const result = await client.query(query, params);
+										if (result.length) {
+											// Multiple queries
+											msg.payload = [];
+											msg.pgsql = [];
+											for (const r of result) {
+												msg.payload = msg.payload.concat(r.rows);
+												msg.pgsql.push({
+													command: r.command,
+													rowCount: r.rowCount,
+													rows: r.rows,
+												});
+											}
+										} else {
+											msg.payload = result.rows;
+											msg.pgsql = {
+												command: result.command,
+												rowCount: result.rowCount,
+											};
+										}
+
+										handleDone();
+										downstreamReady = false;
+										send(msg);
+										if (tickUpstreamNode) {
+											tickUpstreamNode.receive({ tick: true });
+										}
+										if (done) {
+											done();
+										}
+									} catch (ex) {
+										handleError(ex);
 									}
-									if (done) {
-										done();
-									}
-								} catch (ex) {
-									handleError(ex);
-								}
-							};
+								};
+							}
 						}
-
 						getNextRows();
 					} catch (err) {
 						handleError(err);

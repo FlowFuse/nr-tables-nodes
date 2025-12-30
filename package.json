@@ -1,8 +1,8 @@
 {
 	"name": "@flowfuse/nr-tables-nodes",
-	"version": "0.1.0",
+	"version": "0.2.1",
 	"description": "Nodes for use with the FlowFuse Tables offering, allowing developers to write and run queries against databases inside FlowFuse Tables.",
-	"homepage": "https://github.com/FlowFuse/nr-tables-nodes#readme",
+	"homepage": "https://flowfuse.com/node-red/flowfuse/flowfuse-tables/",
 	"author": {
 		"name": "FlowFuse Inc.",
 		"url": "https://github.com/flowfuse"
@@ -58,13 +58,13 @@
 		"pg-cursor": "^2.13.1"
 	},
 	"devDependencies": {
-		"eslint": "^9.23.0",
 		"@eslint/js": "^9.23.0",
+		"eslint": "^9.23.0",
 		"eslint-plugin-html": "^8.1.2",
 		"globals": "^16.0.0",
-		"markdownlint-cli": "^0.45.0",
-		"neostandard": "^0.12.1",
-		"mocha": "^11.1.0"
+		"markdownlint-cli": "^0.46.0",
+		"mocha": "^11.7.5",
+		"neostandard": "^0.12.1"
 	},
 	"scripts": {
 		"lint": "eslint .",

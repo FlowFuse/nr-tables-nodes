@@ -48,11 +48,11 @@ msg.params = [ msg.id ];
 SELECT * FROM table WHERE id = $1
 </pre>
 
-<h4>Parameterized queries</h4>
-<p>
-	As an alternative to numeric parameters,
-	named parameters for parameterized queries can be passed as a parameter object <code>msg.queryParameters</code>:
-</p>
+	<h4>Parameterized queries</h4>
+	<p>
+		As an alternative to numeric parameters,
+		named parameters for parameterized queries can be passed as a parameter object <code>msg.queryParameters</code>:
+	</p>
 <pre>
 // In a function, provide parameters for the named parameterized query
 msg.queryParameters.id = msg.id;
@@ -63,10 +63,14 @@ msg.queryParameters.id = msg.id;
 SELECT * FROM table WHERE id = $id;
 </pre>
 
-<p>
-	<em>Note</em>: named parameters are not natively supported by PostgreSQL, and this library just emulates them,
-	so this is less robust than numeric parameters.
-</p>
+	<p>
+		<em>Note</em>: named parameters are not natively supported by PostgreSQL, and this library just emulates them,
+		so this is less robust than numeric parameters.
+	</p>
+
+	<h4>DDL</h4>
+	<p>Passing an input message with <code>ddl</code> set to <code>true</code> will cause the node to output the DDL for the connected database</p>
+	<p><i>NOTE: The DDL is intended to be a reference only. It is not guaranteed to be 100% complete, accurate or executable.</i></p>
 
 	<h3>Backpressure</h3>
 	<p>
