@@ -68,6 +68,7 @@
 	},
 	"scripts": {
 		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
 		"eslint": "eslint .",
 		"eslint_fix": "eslint --fix .",
 		"markdownlint": "markdownlint '**/*.md'",
