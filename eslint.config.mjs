@@ -1,25 +1,25 @@
-import globals from "globals";
-import html from "eslint-plugin-html";
-import js from "@eslint/js";
+import globals from 'globals';
+import html from 'eslint-plugin-html';
+import js from '@eslint/js';
 import neostandard, { resolveIgnoresFromGitignore } from 'neostandard';
 import stylistic from '@stylistic/eslint-plugin';
 
 export default [
 	{
-		files: ["**/*.js"],
+		files: ['**/*.js'],
 		languageOptions: {
 			globals: {
 				...globals.browser,
 			},
-			sourceType: "script",
+			sourceType: 'script',
 		},
 	},
 	{
-		files: ["**/*.html"],
+		files: ['**/*.html'],
 		plugins: { html },
 		settings: {
-			"html/indent": "tab",
-			"html/report-bad-indent": "error",
+			'html/indent': 'tab',
+			'html/report-bad-indent': 'error',
 		},
 	},
 	{
@@ -32,29 +32,29 @@ export default [
 	...neostandard(),
 	{
 		plugins: {
-			"@stylistic": stylistic,
+			'@stylistic': stylistic,
 		},
 		rules: {
-			"camelcase": "off",
-			"eqeqeq": "off",
-			"no-empty": ["error", { "allowEmptyCatch": true }],
-			"no-unused-vars": ["error", {
-				"args": "none",
-				"caughtErrors": "none",
+			'camelcase': 'off',
+			'eqeqeq': 'error',
+			'no-empty': ['error', { 'allowEmptyCatch': true }],
+			'no-unused-vars': ['error', {
+				'args': 'none',
+				'caughtErrors': 'none',
 			}],
-			"object-shorthand": ["warn", "consistent"],
-			"yoda": "off",
-			"@stylistic/indent": ["warn", "tab", { "SwitchCase": 1 }],
-			"@stylistic/linebreak-style": ["error", "unix"],
-			"@stylistic/max-len": ["warn", 165],
-			"@stylistic/no-tabs": "off",
-			"@stylistic/quotes": ["off", "single", { "avoidEscape": true }],
-			"@stylistic/quote-props": ["warn", "consistent"],
-			"@stylistic/semi": ["warn", "always"],
-			"@stylistic/space-before-function-paren": ["warn", {
-				"anonymous": "always",
-				"asyncArrow": "always",
-				"named": "never",
+			'object-shorthand': ['warn', 'consistent'],
+			'quotes': ['off', 'error', 'single', { 'avoidEscape': true }],
+			'yoda': 'off',
+			'@stylistic/indent': ['warn', 'tab', { 'SwitchCase': 1 }],
+			'@stylistic/linebreak-style': ['error', 'unix'],
+			'@stylistic/max-len': ['warn', 165],
+			'@stylistic/no-tabs': 'off',
+			'@stylistic/quote-props': ['warn', 'consistent'],
+			'@stylistic/semi': ['warn', 'always'],
+			'@stylistic/space-before-function-paren': ['warn', {
+				'anonymous': 'always',
+				'asyncArrow': 'always',
+				'named': 'never',
 			}],
 		},
 	},
