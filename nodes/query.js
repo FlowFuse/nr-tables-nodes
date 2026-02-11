@@ -234,54 +234,84 @@ module.exports = function (RED) {
 
 								cursor = client.query(new Cursor(query, params));
 
-								const cursorcallback = (err, rows, result) => {
-									if (err) {
-										handleError(err);
-									} else {
-										const complete = rows.length < node.rowsPerMsg;
-										if (complete) {
-											handleDone(false);
+								let peekRows = [];
+								let resultMeta = null;
+
+								// Helper to send the next message, using peekRows as the buffer
+								const sendNext = (nextRows, isLast) => {
+									const msg2 = Object.assign({}, msg, {
+										payload: (node.rowsPerMsg || 1) > 1 ? nextRows : nextRows[0],
+										pgsql: {
+											command: resultMeta ? resultMeta.command : undefined,
+											rowCount: resultMeta ? resultMeta.rowCount : undefined
+										},
+										parts: {
+											id: partsId,
+											type: 'array',
+											index: partsIndex
 										}
-										const msg2 = Object.assign({}, msg, {
-											payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
-											pgsql: {
-												command: result.command,
-												rowCount: result.rowCount,
-											},
-											parts: {
-												id: partsId,
-												type: 'array',
-												index: partsIndex,
-											},
-										});
-										if (msg.parts) {
-											msg2.parts.parts = msg.parts;
-										}
-										if (complete) {
-											msg2.parts.count = partsIndex + 1;
-											msg2.complete = true;
-										}
-										partsIndex++;
+									});
+									if (msg.parts) {
+										msg2.parts.parts = msg.parts;
+									}
+									if (isLast) {
+										msg2.parts.count = partsIndex + 1;
+										msg2.complete = true;
+									}
+									partsIndex++;
+									if (config.enableBackPressure) {
 										downstreamReady = false;
-										send(msg2);
-										if (complete) {
-											if (tickUpstreamNode) {
-												tickUpstreamNode.receive({ tick: true });
-											}
-											if (done) {
-												done();
-											}
-										} else {
-											getNextRows();
+									} else {
+										downstreamReady = true;
+									}
+									send(msg2);
+									if (isLast) {
+										if (tickUpstreamNode) {
+											tickUpstreamNode.receive({ tick: true });
+										}
+										if (done) {
+											done();
 										}
 									}
 								};
 
-								getNextRows = () => {
-									if (downstreamReady) {
-										cursor.read(node.rowsPerMsg || 1, cursorcallback);
-									}
+								// Read the first batch to prime the peek buffer
+								const primePeek = () => {
+									cursor.read(node.rowsPerMsg || 1, (err, rows, result) => {
+										if (err) {
+											handleError(err);
+										} else {
+											resultMeta = result;
+											peekRows = rows;
+											getNextRows();
+										}
+									});
 								};
+
+								getNextRows = () => {
+									if (!downstreamReady) return;
+									if (!peekRows || peekRows.length === 0) {
+										// No more data, nothing to send
+										return;
+									}
+									// Read the next batch to peek ahead
+									cursor.read(node.rowsPerMsg || 1, (err, nextRows) => {
+										if (err) {
+											handleError(err);
+										} else {
+											const isLast = !nextRows || nextRows.length === 0;
+											sendNext(peekRows, isLast);
+											if (isLast) {
+												handleDone(false);
+											} else {
+												peekRows = nextRows;
+												getNextRows();
+											}
+										}
+									});
+								};
+
+								primePeek();
 							} else {
 								getNextRows = async () => {
 									try {
@@ -320,9 +350,8 @@ module.exports = function (RED) {
 									}
 								};
 							}
-
-							getNextRows();
 						}
+						getNextRows();
 					} catch (err) {
 						handleError(err);
 					}
