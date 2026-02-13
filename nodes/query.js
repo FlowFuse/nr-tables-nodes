@@ -73,11 +73,11 @@ module.exports = function (RED) {
 		let nbQueue = 0;
 		let hasError = false;
 		let statusTimer = null;
-		const updateStatus = (incQueue = 0, isError = false) => {
+		const updateStatus = function (incQueue = 0, isError = false) {
 			nbQueue += incQueue;
 			hasError |= isError;
 			if (!statusTimer) {
-				statusTimer = setTimeout(() => {
+				statusTimer = setTimeout(function () {
 					let fill = 'grey';
 					if (hasError) {
 						fill = 'red';
@@ -99,7 +99,7 @@ module.exports = function (RED) {
 			}
 		};
 		if (ffTablesToken) {
-			ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then((databases) => {
+			ffAPI.getDatabases(ffHost, ffTeamId, ffTablesToken).then(function (databases) {
 				if (databases.length > 0) {
 					const creds = databases[0].credentials;
 					node.pgPool = new Pool({
@@ -112,7 +112,7 @@ module.exports = function (RED) {
 					});
 					// Listen for errors on the pool (idle client errors)
 					if (node.pgPool && node.pgPool.on) {
-						node.pgPool.on('error', (err, client) => {
+						node.pgPool.on('error', function (err, client) {
 							node.error('Postgres pool error: ' + (err && err.message ? err.message : err));
 							node.status({
 								fill: 'red',
@@ -130,7 +130,7 @@ module.exports = function (RED) {
 						text: 'No Databases'
 					});
 				}
-			}).catch(err => {
+			}).catch(function (err) {
 				node.error(err);
 				node.status({
 					fill: 'red',
@@ -147,7 +147,7 @@ module.exports = function (RED) {
 			node.warn('FlowFuse Tables is not available to this Instance. You may need to upgrade your Instance, or upgrade your Team to a higher plan.');
 		}
 
-		node.on('input', async (msg, send, done) => {
+		node.on('input', async function (msg, send, done) {
 			// 'send' and 'done' require Node-RED 1.0+
 			send = send || function () { node.send.apply(node, arguments); };
 
@@ -169,7 +169,7 @@ module.exports = function (RED) {
 				/** @type {import('pg').PoolClient} */
 				let client = null;
 
-				const handleDone = async (isError = false, err = null) => {
+				const handleDone = async function (isError = false, err = null) {
 					try {
 						if (cursor) {
 							try {
@@ -197,7 +197,7 @@ module.exports = function (RED) {
 					}
 				};
 
-				const handleError = (err) => {
+				const handleError = function (err) {
 					const error = (err ? err.toString() : 'Unknown error!') + ' ' + query;
 					handleDone(true, err);
 					msg.payload = error;
@@ -225,7 +225,7 @@ module.exports = function (RED) {
 					try {
 						// connect to the database
 						client = await node.pgPool.connect();
-						client.on('error', (err) => {
+						client.on('error', function (err) {
 							handleError(err);
 						});
 
@@ -257,7 +257,7 @@ module.exports = function (RED) {
 
 								cursor = client.query(new Cursor(query, params));
 
-								const cursorcallback = (err, rows, result) => {
+								const cursorcallback = function (err, rows, result) {
 									try {
 										if (err) {
 											handleError(err);
@@ -304,7 +304,7 @@ module.exports = function (RED) {
 									}
 								};
 
-								getNextRows = () => {
+								getNextRows = function () {
 									if (downstreamReady) {
 										try {
 											cursor.read(node.rowsPerMsg || 1, cursorcallback);
@@ -314,7 +314,7 @@ module.exports = function (RED) {
 									}
 								};
 							} else {
-								getNextRows = async () => {
+								getNextRows = async function () {
 									try {
 										const result = await client.query(query, params);
 										if (result.length) {
@@ -365,7 +365,7 @@ module.exports = function (RED) {
 		});
 
 		// Cleanup when node is stopped/removed
-		node.on('close', async (removed, done) => {
+		node.on('close', async function (removed, done) {
 			if (statusTimer) {
 				clearTimeout(statusTimer);
 				statusTimer = null;
