@@ -48,6 +48,7 @@ module.exports = function (RED) {
 		node.split = config.split;
 		node.rowsPerMsg = config.rowsPerMsg;
 
+		/** @type {Pool} */
 		node.pgPool = {
 			totalCount: 0
 		};
@@ -62,6 +63,7 @@ module.exports = function (RED) {
 		let downstreamReady = true;
 
 		// For streaming from PostgreSQL
+		/** @type {Cursor} */
 		let cursor;
 		let getNextRows;
 
@@ -108,6 +110,17 @@ module.exports = function (RED) {
 						database: creds.database,
 						ssl: creds.ssl
 					});
+					// Listen for errors on the pool (idle client errors)
+					if (node.pgPool && node.pgPool.on) {
+						node.pgPool.on('error', (err, client) => {
+							node.error('Postgres pool error: ' + (err && err.message ? err.message : err));
+							node.status({
+								fill: 'red',
+								shape: 'ring',
+								text: 'Pool error'
+							});
+						});
+					}
 					updateStatus(0, false);
 				} else {
 					node.warn('No databases found in FlowFuse Tables for your team.');
@@ -153,30 +166,40 @@ module.exports = function (RED) {
 				const partsId = Math.random();
 				let query = msg.query ? msg.query : Mustache.render(node.query, { msg });
 
+				/** @type {import('pg').PoolClient} */
 				let client = null;
 
-				const handleDone = async (isError = false) => {
-					if (cursor) {
-						cursor.close();
-						cursor = null;
-					}
-					if (client) {
-						if (client.release) {
-							client.release(isError);
-						} else if (client.end) {
-							await client.end();
+				const handleDone = async (isError = false, err = null) => {
+					try {
+						if (cursor) {
+							try {
+								cursor.close();
+							} catch (err) {
+								node.log('Error closing cursor: ', err);
+							}
+							cursor = null;
 						}
-						client = null;
-						updateStatus(-1, isError);
-					} else if (isError) {
-						updateStatus(-1, isError);
+						if (client) {
+							if (client.release) {
+								client.release(err || isError);
+							} else if (client.end) {
+								await client.end();
+							}
+							client = null;
+							updateStatus(-1, isError);
+						} else if (isError) {
+							updateStatus(-1, isError);
+						}
+					} catch (err) {
+						node.warn('Error releasing client: ' + err);
+					} finally {
+						getNextRows = null;
 					}
-					getNextRows = null;
 				};
 
 				const handleError = (err) => {
 					const error = (err ? err.toString() : 'Unknown error!') + ' ' + query;
-					handleDone(true);
+					handleDone(true, err);
 					msg.payload = error;
 					msg.parts = {
 						id: partsId,
@@ -235,51 +258,59 @@ module.exports = function (RED) {
 								cursor = client.query(new Cursor(query, params));
 
 								const cursorcallback = (err, rows, result) => {
-									if (err) {
-										handleError(err);
-									} else {
-										const complete = rows.length < node.rowsPerMsg;
-										if (complete) {
-											handleDone(false);
-										}
-										const msg2 = Object.assign({}, msg, {
-											payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
-											pgsql: {
-												command: result.command,
-												rowCount: result.rowCount,
-											},
-											parts: {
-												id: partsId,
-												type: 'array',
-												index: partsIndex,
-											},
-										});
-										if (msg.parts) {
-											msg2.parts.parts = msg.parts;
-										}
-										if (complete) {
-											msg2.parts.count = partsIndex + 1;
-											msg2.complete = true;
-										}
-										partsIndex++;
-										downstreamReady = false;
-										send(msg2);
-										if (complete) {
-											if (tickUpstreamNode) {
-												tickUpstreamNode.receive({ tick: true });
-											}
-											if (done) {
-												done();
-											}
+									try {
+										if (err) {
+											handleError(err);
 										} else {
-											getNextRows();
+											const complete = rows.length < node.rowsPerMsg;
+											if (complete) {
+												handleDone(false);
+											}
+											const msg2 = Object.assign({}, msg, {
+												payload: (node.rowsPerMsg || 1) > 1 ? rows : rows[0],
+												pgsql: {
+													command: result.command,
+													rowCount: result.rowCount,
+												},
+												parts: {
+													id: partsId,
+													type: 'array',
+													index: partsIndex,
+												},
+											});
+											if (msg.parts) {
+												msg2.parts.parts = msg.parts;
+											}
+											if (complete) {
+												msg2.parts.count = partsIndex + 1;
+												msg2.complete = true;
+											}
+											partsIndex++;
+											downstreamReady = false;
+											send(msg2);
+											if (complete) {
+												if (tickUpstreamNode) {
+													tickUpstreamNode.receive({ tick: true });
+												}
+												if (done) {
+													done();
+												}
+											} else {
+												getNextRows();
+											}
 										}
+									} catch (err) {
+										handleError(err);
 									}
 								};
 
 								getNextRows = () => {
 									if (downstreamReady) {
-										cursor.read(node.rowsPerMsg || 1, cursorcallback);
+										try {
+											cursor.read(node.rowsPerMsg || 1, cursorcallback);
+										} catch (err) {
+											handleError(err);
+										}
 									}
 								};
 							} else {
@@ -332,6 +363,37 @@ module.exports = function (RED) {
 				}
 			}
 		});
+
+		// Cleanup when node is stopped/removed
+		node.on('close', async (removed, done) => {
+			if (statusTimer) {
+				clearTimeout(statusTimer);
+				statusTimer = null;
+			}
+
+			// Close any active cursor
+			try {
+				if (cursor) {
+					cursor.close();
+					cursor = null;
+				}
+			} catch (err) {
+				node.warn('Error closing cursor: ' + err);
+			}
+
+			// End the pool if it exists (each node instance creates its own pool)
+			try {
+				if (node.pgPool && node.pgPool.end) {
+					await node.pgPool.end();
+				}
+			} catch (err) {
+				node.error('Error closing pg pool: ' + err);
+			}
+
+			if (done) {
+				done();
+			}
+		})
 	}
 
 	if (ffHost) {
