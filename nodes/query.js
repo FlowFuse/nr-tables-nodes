@@ -108,6 +108,11 @@ module.exports = function (RED) {
 						database: creds.database,
 						ssl: creds.ssl
 					});
+					node.pgPool.on('error', (err, client) => {
+						if (err) {
+							updateStatus(0, true);
+						}
+					});
 					updateStatus(0, false);
 				} else {
 					node.warn('No databases found in FlowFuse Tables for your team.');
