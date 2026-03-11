@@ -1,3 +1,11 @@
+### 0.2.2
+
+ - Bump nr catalogue on release (#46)
+ - Bump the production-dependencies group with 2 updates (#44) @app/dependabot
+ - Add Pool error handler (#49) @hardillb
+ - Fix quote and eqeqeq lint rules (#42) @hardillb
+ - Fix glob dependency (#40) @hardillb
+
 ### 0.2.1
 
 - Bump version to 0.2.2 and update changelog with dependency updates.
