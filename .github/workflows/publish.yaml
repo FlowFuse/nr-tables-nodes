@@ -45,6 +45,8 @@ jobs:
         with:
           app-id: ${{ secrets.GH_BOT_APP_ID }}
           private-key: ${{ secrets.GH_BOT_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: nr-launcher
       - name: Trigger nr-launcher package build
         uses: benc-uk/workflow-dispatch@e2e5e9a103e331dad343f381a29e654aea3cf8fc # v1.2.4
         with:
