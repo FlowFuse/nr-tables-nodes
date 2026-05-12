@@ -9,6 +9,8 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 1
     groups:
       production-dependencies:
         dependency-type: "production"
