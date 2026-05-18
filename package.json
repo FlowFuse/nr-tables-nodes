@@ -74,7 +74,6 @@
 		"markdownlint": "markdownlint '**/*.md'",
 		"markdownlint_fix": "markdownlint --fix '**/*.md'",
 		"fix": "npm run rtlcss && npm run eslint_fix && npm run markdownlint_fix",
-		"pretest": "npm run eslint && npm run markdownlint",
 		"mocha": "mocha",
 		"test": "npm run mocha"
 	}
