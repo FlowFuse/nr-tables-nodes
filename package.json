@@ -63,7 +63,7 @@
 		"eslint-plugin-html": "^8.1.4",
 		"globals": "^17.6.0",
 		"markdownlint-cli": "^0.48.0",
-		"mocha": "^11.7.5",
+		"mocha": "^11.7.6",
 		"neostandard": "^0.13.0"
 	},
 	"scripts": {
@@ -76,5 +76,8 @@
 		"fix": "npm run rtlcss && npm run eslint_fix && npm run markdownlint_fix",
 		"mocha": "mocha",
 		"test": "npm run mocha"
-	}
+	},
+	"overrides": {
+    	"minimatch@>=9 <9.0.9": "9.0.9"
+  	}
 }
