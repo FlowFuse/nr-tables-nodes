@@ -339,8 +339,17 @@ module.exports = function (RED) {
 		});
 	}
 
+	let enabled = true;
+	if (process.env['FFNODE_DISABLE_TABLE'] === 'true') {
+		enabled = false;
+	}
+
 	if (ffHost) {
-		RED.nodes.registerType('tables-query', QueryNode);
+		if (enabled) {
+			RED.nodes.registerType('tables-query', QueryNode);
+		} else {
+			RED.log.warn('@flowfuse/tables-query: node disabled');
+		}
 	} else {
 		// report as warning that the node is not configured
 		RED.log.warn('@flowfuse/tables-query: This node can only be used in Node-RED Instances running with FlowFuse');
