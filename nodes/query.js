@@ -340,7 +340,7 @@ module.exports = function (RED) {
 	}
 
 	let enabled = true;
-	if (process.env['FFNODE_DISABLE_TABLE'] && process.env['FFNODE_DISABLE_TABLE'] === 'true') {
+	if (process.env['FFNODE_DISABLE_TABLE'] === 'true') {
 		enabled = false;
 	}
 
