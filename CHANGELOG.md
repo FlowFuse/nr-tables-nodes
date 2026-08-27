@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.3.0](https://github.com/FlowFuse/nr-tables-nodes/compare/v0.2.2...v0.3.0) (2026-08-26)
+
+
+### Features
+
+* Adds kill switch env var ([#92](https://github.com/FlowFuse/nr-tables-nodes/issues/92)) ([c226eb3](https://github.com/FlowFuse/nr-tables-nodes/commit/c226eb3f5e51ad3bf0ce673d7275cb95ce6443a2))
+
 ### 0.2.2
 
  - Bump nr catalogue on release (#46)
