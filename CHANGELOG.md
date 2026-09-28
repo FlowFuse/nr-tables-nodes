@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [0.3.1](https://github.com/FlowFuse/nr-tables-nodes/compare/v0.3.0...v0.3.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* Fix disable ([#105](https://github.com/FlowFuse/nr-tables-nodes/issues/105)) ([51767ab](https://github.com/FlowFuse/nr-tables-nodes/commit/51767abea2de1671d690da4d15928d86685d185a))
+
 ## [0.3.0](https://github.com/FlowFuse/nr-tables-nodes/compare/v0.2.2...v0.3.0) (2026-08-26)
 
 
