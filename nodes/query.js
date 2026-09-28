@@ -342,7 +342,6 @@ module.exports = function (RED) {
 	let enabled = true;
 	if (process.env['FFNODE_DISABLE_TABLE'] === 'true') {
 		enabled = false;
-
 	}
 
 	if (ffHost) {
@@ -350,6 +349,7 @@ module.exports = function (RED) {
 			RED.nodes.registerType('tables-query', QueryNode);
 		} else {
 			RED.log.warn('@flowfuse/tables-query: node disabled');
+			throw new Error('diabled');
 		}
 	} else {
 		// report as warning that the node is not configured
