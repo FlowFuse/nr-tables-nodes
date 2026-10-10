@@ -4,16 +4,23 @@
 	</p>
 
 	<h3>Outputs</h3>
+	<h4>Single Message Output</h4>
 	<p>The response (rows) is provided in <code>msg.payload</code> as an array.</p>
+	<h4>Split Results</h4>
 	<p>
-		An exception is if the <em>Split results</em> option is enabled and the <em>Number of rows per message</em> is set to 1,
-		then <code>msg.payload</code> is not an array but the single-row response.
+		In the case where the <em>"split results"</em> option is enabled, then the rows are split
+		into multiple messages, defined by the <em>"number of rows per message"</em> option.
 	</p>
 	<p>
-		Additional information is provided as <code>msg.pgsql.rowCount</code> and <code>msg.pgsql.command</code>.
-		See the <a href="https://node-postgres.com/apis/result">underlying documentation</a> for details.
+		If the <em>"number of rows per message"</em> is set to 1, then the response is provided in
+		<code>msg.payload</code> as a single object, otherwise it is an array.
 	</p>
-	<p>In the case of multiple queries, then <code>msg.pgsql</code> is an array.</p>
+	<p>
+		A second output is also added to the node when the <em>"split results"</em> option is enabled.
+		This second output emits a "complete" message after the last message of the sequence is emitted,
+		which contains details about the total number of rows, and contains the data in order to join your
+		separate messages into a single array again using a "join" node.
+	</p>
 
 	<h3>Inputs</h3>
 	<h4>SQL query template</h4>
@@ -68,17 +75,12 @@ SELECT * FROM table WHERE id = $id;
 	<h3>Backpressure</h3>
 	<p>
 		This node supports <em>backpressure</em> / <em>flow control</em>:
-		when the <em>Split results</em> option is enabled, it waits for a <em>tick</em> before releasing the next batch of lines,
+		when the <em>Split Results</em> and <em>Enable Backpressure</em> options are enabled, it waits for a <em>tick</em> before releasing the next batch of lines,
 		to make sure the rest of your Node-RED flow is ready to process more data
 		(instead of risking an out-of-memory condition), and also conveys this information upstream.
 	</p><p>
-		So when the <em>Split results</em> option is enabled, this node will only output one message at first,
+		So when the <em>Split Results</em> and <em>Enable Backpressure</em> options are enabled, this node will only output one message at first,
 		and then awaits a message containing a truthy <code>msg.tick</code> before releasing the next message.
-	</p><p>
-		To make this behaviour potentially automatic (avoiding manual wires),
-		this node declares its ability by exposing a truthy <code>node.tickConsumer</code> for downstream nodes to detect this feature,
-		and a truthy <code>node.tickProvider</code> for upstream nodes.
-		Likewise, this node detects upstream nodes using the same back-pressure convention, and automatically sends ticks.
 	</p>
 
 	<h3>Sequences for split results</h3>
