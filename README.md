@@ -10,15 +10,22 @@ This node allows you to write and run queries against database tables that are m
 
 ## Outputs
 
+### Single Message Output
+
 The response (rows) is provided in `msg.payload` as an array.
 
-An exception is if the *Split results* option is enabled and the *Number of rows per message* is set to **1**,
-then `msg.payload` is not an array but the single-row response.
+### Split Results
 
-Additional information is provided as `msg.pgsql.rowCount` and `msg.pgsql.command`.
-See the [underlying documentation](https://node-postgres.com/apis/result) for details.
+In the case where the _"split results"_ option is enabled, then the rows are split
+into multiple messages, defined by the _"number of rows per message"_ option.
 
-In the case of multiple queries, then `msg.pgsql` is an array.
+If the _"number of rows per message"_ is set to 1, then the response is provided in
+`msg.payload` as a single object, otherwise it is an array.
+
+A second output is also added to the node when the _"split results"_ option is enabled.
+This second output emits a "complete" message after the last message of the sequence is emitted,
+which contains details about the total number of rows, and contains the data in order to join your
+separate messages into a single array again using a "join" node.
 
 ## Inputs
 
